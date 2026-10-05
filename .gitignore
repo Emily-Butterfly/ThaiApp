@@ -1,0 +1,20 @@
+node_modules/
+.DS_Store
+*.log
+# Signierschlüssel nie einchecken – Ausnahme: der öffentliche Debug-Schlüssel für die Test-APK
+*.jks
+*.keystore
+!android/app/debug.keystore
+
+# Von "npm run assets" erzeugt (scripts/assets.mjs)
+www/vendor/
+www/fonts/*.woff2
+www/fonts/LICENSE-*.txt
+www/icons/*.png
+android/app/src/main/res/mipmap-*/ic_launcher*.png
+android/app/src/main/res/drawable-nodpi/
+ios/App/App/Assets.xcassets/AppIcon.appiconset/*.png
+ios/App/App/Assets.xcassets/Splash.imageset/*.png
+
+# Versionen sind in package.json exakt festgelegt
+package-lock.json

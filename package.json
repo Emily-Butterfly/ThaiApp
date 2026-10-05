@@ -1,0 +1,29 @@
+{
+  "name": "thai-app",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Thai in 16 Wochen (A0–A1) – Lern-App für Android, iOS und als installierbare Web-App",
+  "license": "UNLICENSED",
+  "scripts": {
+    "assets": "node scripts/assets.mjs",
+    "serve": "npm run assets && npx --yes http-server www -p 8080 -c-1",
+    "sync": "npm run assets && cap sync",
+    "android": "npm run sync && cap open android",
+    "ios": "npm run sync && cap open ios",
+    "build:android": "npm run sync && cd android && ./gradlew assembleDebug"
+  },
+  "dependencies": {
+    "@capacitor-community/text-to-speech": "8.0.2",
+    "@capacitor/android": "8.5.2",
+    "@capacitor/app": "8.1.2",
+    "@capacitor/core": "8.5.2",
+    "@capacitor/ios": "8.5.2",
+    "@capacitor/preferences": "8.0.1"
+  },
+  "devDependencies": {
+    "@capacitor/cli": "8.5.2",
+    "@fontsource/andika": "5.3.0",
+    "@fontsource/sarabun": "5.3.0",
+    "sharp": "0.35.5"
+  }
+}

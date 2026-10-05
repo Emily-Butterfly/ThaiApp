@@ -1,0 +1,17 @@
+{
+  "appId": "io.github.emilybutterfly.thaiapp",
+  "appName": "Thai lernen",
+  "webDir": "www",
+  "android": {
+    "backgroundColor": "#00000000"
+  },
+  "ios": {
+    "contentInset": "never"
+  },
+  "plugins": {
+    "SystemBars": {
+      "insetsHandling": "css",
+      "initialViewportFitValueHint": "cover"
+    }
+  }
+}
