@@ -1,0 +1,63 @@
+name: Android-App bauen
+
+on:
+  push:
+    paths-ignore:
+      - "**.md"
+  workflow_dispatch:
+
+jobs:
+  apk:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: package.json
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 21
+
+      - uses: gradle/actions/setup-gradle@v4
+
+      - name: Abhängigkeiten installieren
+        run: npm install --no-audit --no-fund
+
+      - name: Icons, Schriften und Laufzeit erzeugen
+        run: npm run assets
+
+      - name: Web-App ins Android-Projekt kopieren
+        run: npx cap sync android
+
+      - name: APK bauen
+        working-directory: android
+        run: ./gradlew assembleDebug --no-daemon
+
+      - name: APK benennen
+        run: cp android/app/build/outputs/apk/debug/app-debug.apk Thai-lernen.apk
+
+      - name: APK als Build-Artefakt hochladen
+        uses: actions/upload-artifact@v4
+        with:
+          name: Thai-lernen-APK
+          path: Thai-lernen.apk
+          if-no-files-found: error
+
+      # Auf dem Hauptbranch: APK unter "Releases" veröffentlichen, damit sie sich direkt am Handy laden lässt.
+      - name: Release aktualisieren
+        if: github.ref_name == github.event.repository.default_branch
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release delete android-latest --yes --cleanup-tag || true
+          gh release create android-latest Thai-lernen.apk \
+            --target "$GITHUB_SHA" \
+            --title "Thai lernen – Android-App (Build ${{ github.run_number }})" \
+            --notes "Auf dem Android-Handy herunterladen und öffnen. Beim ersten Mal fragt Android, ob der Browser Apps installieren darf – das einmal erlauben. Neue Builds lassen sich einfach drüber installieren, der Lernfortschritt bleibt erhalten."
