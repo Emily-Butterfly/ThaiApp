@@ -6,7 +6,7 @@ on:
       - "www/**"
       - "resources/**"
       - "scripts/**"
-      - "package-lock.json"
+      - "package.json"
       - ".github/workflows/pages.yml"
   workflow_dispatch:
 
