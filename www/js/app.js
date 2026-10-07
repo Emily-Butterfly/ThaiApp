@@ -1,17 +1,22 @@
-/* Oberfläche und Lernlogik: Kurs, Lektionen, Wochentests, Vokabeln, Einstellungen */
+/* Oberfläche und Lernlogik: zwei Kurse (A0–A1, A2), Lektionen, Wochentests, Vokabeln, Einstellungen */
 (() => {
 "use strict";
 const COURSE = window.COURSE;
+const COURSE_A2 = window.COURSE_A2;
 const P = window.Platform;
-const W = COURSE.weeks;
 const PASS = 60;
+const COURSES = {
+  a1:{id:"a1", short:"A0–A1", span:"16 Wochen", title:"Thai in 16 Wochen", lead:"Von den ersten Tönen bis A1 – mit Schwerpunkt auf Grammatik und Sprachgefühl.", heroTh:"เรียนภาษาไทย", heroRo:"rian phaa-sǎa thai", heroDe:"Thai lernen", data:COURSE, path:"#", home:"#/", prefix:""},
+  a2:{id:"a2", short:"A2", span:"12 Wochen", title:"Thai A2 in 12 Wochen", lead:"Aufbauend auf A0–A1: Alltag, Wohnen, Gesundheit, Reisen und echte Gespräche – mit neuen Grammatikbausteinen und viel Lesepraxis.", heroTh:"ภาษาไทยในชีวิตจริง", heroRo:"phaa-sǎa thai nai chii-wít jing", heroDe:"Thai im echten Leben", data:COURSE_A2, path:"#/a2", home:"#/a2", prefix:"a2-"}
+};
+const COURSE_LIST = [COURSES.a1, COURSES.a2];
 const KIND = {
   laute:{label:"Laute & Töne", icon:"wave"},
   schrift:{label:"Schrift", glyph:"ก"},
   gram:{label:"Grammatik", icon:"blocks"},
   gefuehl:{label:"Sprachgefühl", icon:"heart"},
   kontext:{label:"Im Kontext", icon:"chat"},
-  lesen:{label:"Lese-Ecke", icon:"book"}
+  lesen:{label:"Lesen & Schreiben", icon:"book"}
 };
 const ICONS = {
   wave:'<path d="M3 12h2M7 8v8M11 4v16M15 8v8M19 11v2"/>',
@@ -87,7 +92,7 @@ const renderBlock = (b) => (BLOCK[b[0]] ? BLOCK[b[0]](b) : "");
 
 /* ---- Speicher ---- */
 const KEY = "thai-a1-kurs-v1";
-const blank = () => ({v:1, done:{}, quiz:{}, settings:{ro:true, slow:false, theme:"system"}});
+const blank = () => ({v:1, done:{}, quiz:{}, settings:{ro:true, slow:false, theme:"system", course:"a1"}});
 function loadState(raw){
   const b = blank();
   try{
@@ -103,6 +108,7 @@ function loadState(raw){
 }
 let state = loadState(P.storage.load(KEY));
 function save(){ P.storage.save(KEY, JSON.stringify(state)); }
+const curCourse = () => COURSES[state.settings.course] || COURSES.a1;
 
 /* ---- Vorlesen ---- */
 const TTS = P.tts;
@@ -112,107 +118,116 @@ function onVoice(){
 }
 function speak(text){
   if(!TTS.ok) return;
-  const t = String(text).replace(/[\/…„“"()–—]/g, " ").trim();
+  const t = String(text).replace(/[\/…„“"()–—◌]/g, " ").trim();
   if(t) TTS.speak(t, state.settings.slow);
 }
 
-/* ---- Fortschritt ---- */
-const lessonKey = (n, i) => n + "-" + i;
-function weekStats(w){
+/* ---- Fortschritt ----
+   Der Kurs A0–A1 speichert ohne Präfix (wie vor dem A2-Kurs), A2 mit "a2-". */
+const lessonKey = (c, n, i) => c.prefix + n + "-" + i;
+const quizKey = (c, n) => c.prefix + n;
+const weekHref = (c, n) => `${c.path}/w/${n}`;
+function weekStats(c, w){
   let d = 0;
-  w.lessons.forEach((_, i) => { if(state.done[lessonKey(w.n, i)]) d++; });
-  const qBest = +state.quiz[w.n] || 0, qp = qBest >= PASS;
+  w.lessons.forEach((_, i) => { if(state.done[lessonKey(c, w.n, i)]) d++; });
+  const qBest = +state.quiz[quizKey(c, w.n)] || 0, qp = qBest >= PASS;
   return {done: d + (qp ? 1 : 0), total: w.lessons.length + 1, qBest, qp};
 }
-function progress(){
+function progress(c){
   let d = 0, t = 0;
-  W.forEach((w) => { const s = weekStats(w); d += s.done; t += s.total; });
+  c.data.weeks.forEach((w) => { const s = weekStats(c, w); d += s.done; t += s.total; });
   return {done:d, total:t, pct: t ? Math.round(d / t * 100) : 0};
 }
-function nextStep(){
-  for(const w of W){
+function nextStep(c){
+  for(const w of c.data.weeks){
     for(let i = 0; i < w.lessons.length; i++){
-      if(!state.done[lessonKey(w.n, i)]) return {href:`#/w/${w.n}/l/${i}`, n:w.n, label:KIND[w.lessons[i].k].label, title:w.lessons[i].t};
+      if(!state.done[lessonKey(c, w.n, i)]) return {href:`${weekHref(c, w.n)}/l/${i}`, n:w.n, label:KIND[w.lessons[i].k].label, title:w.lessons[i].t};
     }
-    if((+state.quiz[w.n] || 0) < PASS) return {href:`#/w/${w.n}/q`, n:w.n, label:"Wochentest", title:`${w.quiz.length} Fragen zu „${w.title}“`};
+    if((+state.quiz[quizKey(c, w.n)] || 0) < PASS) return {href:`${weekHref(c, w.n)}/q`, n:w.n, label:"Wochentest", title:`${w.quiz.length} Fragen zu „${w.title}“`};
   }
   return null;
 }
-function nextTarget(n, i){
-  const w = W[n - 1];
-  return i + 1 < w.lessons.length ? {href:`#/w/${n}/l/${i + 1}`, label:"Nächste Lektion"} : {href:`#/w/${n}/q`, label:"Zum Wochentest"};
+function nextTarget(c, n, i){
+  const w = c.data.weeks[n - 1];
+  return i + 1 < w.lessons.length ? {href:`${weekHref(c, n)}/l/${i + 1}`, label:"Nächste Lektion"} : {href:`${weekHref(c, n)}/q`, label:"Zum Wochentest"};
 }
 
 /* ---- Ansichten ---- */
 const app = document.getElementById("app");
 const topbar = document.getElementById("topbar");
 const tabbar = document.getElementById("tabbar");
-let current = {name:"home"};
-let heroDone = false;
+let current = {name:"home", c:COURSES.a1};
+const heroDone = {};
 
 function badge(k){ const K = KIND[k]; return `<span class="badge" aria-hidden="true">${K.glyph ? `<span class="glyph">${K.glyph}</span>` : icon(K.icon)}</span>`; }
 
 function viewTop(r){
-  const p = progress();
+  const c = r.c || curCourse(), p = progress(c);
   let left;
-  if(r.name === "lesson" || r.name === "quiz") left = `<a class="back" href="#/w/${r.n}">${icon("back")}Woche ${r.n}</a>`;
-  else if(r.name === "week") left = `<a class="back" href="#/">${icon("back")}Kurs</a>`;
-  else left = `<span class="brand"><span class="bt" lang="th">ไทย</span>Thai A0–A1</span>`;
-  return `${left}<span class="mini"><span class="pbar" aria-hidden="true"><i style="width:${p.pct}%"></i></span><span>${p.pct} %<span class="sr"> des Kurses erledigt</span></span></span>`;
+  if(r.name === "lesson" || r.name === "quiz") left = `<a class="back" href="${weekHref(c, r.n)}">${icon("back")}Woche ${r.n}</a>`;
+  else if(r.name === "week") left = `<a class="back" href="${c.home}">${icon("back")}Kurs ${c.short}</a>`;
+  else left = `<span class="brand"><span class="bt" lang="th">ไทย</span>Thai ${c.short}</span>`;
+  return `${left}<span class="mini"><span class="pbar" aria-hidden="true"><i style="width:${p.pct}%"></i></span><span>${p.pct} %<span class="sr"> des Kurses ${c.short} erledigt</span></span></span>`;
 }
 function viewTabs(r){
   const t = (href, on, ic, label) => `<a class="tab" href="${href}"${on ? ' aria-current="page"' : ""}>${icon(ic)}<span>${label}</span></a>`;
   const inCourse = ["home","week","lesson","quiz"].includes(r.name);
-  return t("#/", inCourse, "path", "Kurs") + t("#/vokabeln", r.name === "vocab", "vocab", "Vokabeln") + t("#/info", r.name === "info", "info", "Info");
+  return t(curCourse().home, inCourse, "path", "Kurs") + t("#/vokabeln", r.name === "vocab", "vocab", "Vokabeln") + t("#/info", r.name === "info", "info", "Info");
 }
-function weekRow(w){
-  const s = weekStats(w);
+function courseSwitch(c){
+  return `<nav class="cswitch" aria-label="Kurs wählen">${COURSE_LIST.map((k) => { const p = progress(k); return `<a href="${k.home}"${k.id === c.id ? ' aria-current="page"' : ""}><b>${k.short}</b><span>${k.span}, ${p.pct} %</span></a>`; }).join("")}</nav>`;
+}
+function weekRow(c, w){
+  const s = weekStats(c, w);
   const cls = s.done === s.total ? "complete" : (s.done > 0 ? "started" : "");
-  return `<li class="wk ${cls}"><a href="#/w/${w.n}"><span class="num" aria-hidden="true">${w.n}</span><span><span class="kp" lang="th">${esc(w.key[0])}</span><span class="tt">Woche ${w.n}: ${esc(w.title)}</span></span><span class="frac">${s.done}/${s.total}<span class="sr"> erledigt</span></span></a></li>`;
+  return `<li class="wk ${cls}"><a href="${weekHref(c, w.n)}"><span class="num" aria-hidden="true">${w.n}</span><span><span class="kp" lang="th">${esc(w.key[0])}</span><span class="tt">Woche ${w.n}: ${esc(w.title)}</span></span><span class="frac">${s.done}/${s.total}<span class="sr"> erledigt</span></span></a></li>`;
 }
-function viewHome(){
-  const p = progress(), nx = nextStep();
-  const heroRo = "rian phaa-sǎa thai";
-  const anim = !heroDone; heroDone = true;
-  let h = `<section class="hero">
-    <p class="th-hero" lang="th" data-say="เรียนภาษาไทย">เรียนภาษาไทย</p>
-    <p class="hro">${melody(heroRo, {scale:1.7, anim})}<span>${esc(heroRo)}, „Thai lernen“</span></p>
-    <h1>Thai in 16 Wochen</h1>
-    <p class="lead">Von den ersten Tönen bis A1 – mit Schwerpunkt auf Grammatik und Sprachgefühl. Die goldenen Linien zeigen dir den Tonverlauf jeder Silbe.<span class="tts-inline"> Tippe auf Thai-Text, um ihn zu hören.</span></p>
-    ${nx ? `<a class="continue" href="${nx.href}"><span><small>${p.done ? "Weiterlernen" : "Loslegen"}: Woche ${nx.n}, ${esc(nx.label)}</small><strong>${fmt(nx.title, false)}</strong></span>${icon("next")}</a>` : `<div class="continue"><span><small>Geschafft!</small><strong>Du hast alle 16 Wochen abgeschlossen.</strong></span></div>`}
+function viewHome(c){
+  const p = progress(c), nx = nextStep(c);
+  const anim = !heroDone[c.id]; heroDone[c.id] = true;
+  let cont;
+  if(nx) cont = `<a class="continue" href="${nx.href}"><span><small>${p.done ? "Weiterlernen" : "Loslegen"}: Woche ${nx.n}, ${esc(nx.label)}</small><strong>${fmt(nx.title, false)}</strong></span>${icon("next")}</a>`;
+  else if(c.id === "a1") cont = `<a class="continue" href="${COURSES.a2.home}"><span><small>A0–A1 geschafft!</small><strong>Weiter mit dem A2-Kurs</strong></span>${icon("next")}</a>`;
+  else cont = `<div class="continue"><span><small>Geschafft!</small><strong>Du hast alle ${c.data.weeks.length} Wochen abgeschlossen.</strong></span></div>`;
+  let h = `${updateBanner()}${courseSwitch(c)}<section class="hero">
+    <p class="th-hero${c.heroTh.length > 12 ? " long" : ""}" lang="th" data-say="${esc(c.heroTh)}">${esc(c.heroTh)}</p>
+    <p class="hro">${melody(c.heroRo, {scale:1.7, anim})}<span>${esc(c.heroRo)}, „${esc(c.heroDe)}“</span></p>
+    <h1>${esc(c.title)}</h1>
+    <p class="lead">${esc(c.lead)} Die goldenen Linien zeigen dir den Tonverlauf jeder Silbe.<span class="tts-inline"> Tippe auf Thai-Text, um ihn zu hören.</span></p>
+    ${cont}
     <div class="prog"><div class="row"><span>Fortschritt</span><span>${p.done} von ${p.total} Einheiten</span></div><div class="pbar"><i style="width:${p.pct}%"></i></div></div>
   </section>`;
-  COURSE.phases.forEach((ph) => {
-    h += `<section class="phase"><h2>${esc(ph.title)}</h2><p class="phase-sub">${esc(ph.sub)}</p><ol class="weeks">${ph.weeks.map((n) => weekRow(W[n - 1])).join("")}</ol></section>`;
+  c.data.phases.forEach((ph) => {
+    h += `<section class="phase"><h2>${esc(ph.title)}</h2><p class="phase-sub">${esc(ph.sub)}</p><ol class="weeks">${ph.weeks.map((n) => weekRow(c, c.data.weeks[n - 1])).join("")}</ol></section>`;
   });
   return h;
 }
-function lessonRow(w, l, i){
-  const done = !!state.done[lessonKey(w.n, i)];
-  return `<li class="${done ? "isdone" : ""}"><a href="#/w/${w.n}/l/${i}">${badge(l.k)}<span><span class="kind">${KIND[l.k].label}</span><span class="lt">${fmt(l.t, false)}</span></span><span class="tick">${icon("check")}<span class="sr">${done ? "erledigt" : "offen"}</span></span></a></li>`;
+function lessonRow(c, w, l, i){
+  const done = !!state.done[lessonKey(c, w.n, i)];
+  return `<li class="${done ? "isdone" : ""}"><a href="${weekHref(c, w.n)}/l/${i}">${badge(l.k)}<span><span class="kind">${KIND[l.k].label}</span><span class="lt">${fmt(l.t, false)}</span></span><span class="tick">${icon("check")}<span class="sr">${done ? "erledigt" : "offen"}</span></span></a></li>`;
 }
-function quizRow(w, s){
-  return `<li class="${s.qp ? "isdone" : ""}"><a href="#/w/${w.n}/q"><span class="badge" aria-hidden="true">${icon("quiz")}</span><span><span class="kind">Wochentest, bestanden ab ${PASS} %</span><span class="lt">${w.quiz.length} Fragen</span>${s.qBest ? `<span class="score-note">Bestes Ergebnis: ${s.qBest} %</span>` : ""}</span><span class="tick">${icon("check")}<span class="sr">${s.qp ? "bestanden" : "offen"}</span></span></a></li>`;
+function quizRow(c, w, s){
+  return `<li class="${s.qp ? "isdone" : ""}"><a href="${weekHref(c, w.n)}/q"><span class="badge" aria-hidden="true">${icon("quiz")}</span><span><span class="kind">Wochentest, bestanden ab ${PASS} %</span><span class="lt">${w.quiz.length} Fragen</span>${s.qBest ? `<span class="score-note">Bestes Ergebnis: ${s.qBest} %</span>` : ""}</span><span class="tick">${icon("check")}<span class="sr">${s.qp ? "bestanden" : "offen"}</span></span></a></li>`;
 }
-function viewWeek(n){
-  const w = W[n - 1], s = weekStats(w);
+function viewWeek(c, n){
+  const W = c.data.weeks, w = W[n - 1], s = weekStats(c, w);
   return `<div class="wkhead"><span class="pill">${w.lvl}</span><span>Woche ${n} von ${W.length}</span></div>
   <div class="keytile" data-say="${esc(w.key[0])}"><span class="th" lang="th">${esc(w.key[0])}${sayIc()}</span>${roLine(w.key[1])}<span class="de">${fmt(w.key[2], false)}</span></div>
   <h1>${esc(w.title)}</h1><p class="lead">${fmt(w.sub)}</p>
   <h2 class="h-sm">Am Ende der Woche kannst du …</h2>
   <ul class="goals">${w.goals.map((g) => `<li>${fmt(g)}</li>`).join("")}</ul>
   <h2 class="h-sm">Lektionen</h2>
-  <ol class="lessons">${w.lessons.map((l, i) => lessonRow(w, l, i)).join("")}${quizRow(w, s)}</ol>
-  <nav class="pager" aria-label="Wochen">${n > 1 ? `<a class="btn ghost" href="#/w/${n - 1}">${icon("back")}Woche ${n - 1}</a>` : "<span></span>"}${n < W.length ? `<a class="btn ghost" href="#/w/${n + 1}">Woche ${n + 1}${icon("next")}</a>` : ""}</nav>`;
+  <ol class="lessons">${w.lessons.map((l, i) => lessonRow(c, w, l, i)).join("")}${quizRow(c, w, s)}</ol>
+  <nav class="pager" aria-label="Wochen">${n > 1 ? `<a class="btn ghost" href="${weekHref(c, n - 1)}">${icon("back")}Woche ${n - 1}</a>` : "<span></span>"}${n < W.length ? `<a class="btn ghost" href="${weekHref(c, n + 1)}">Woche ${n + 1}${icon("next")}</a>` : ""}</nav>`;
 }
-function viewLesson(n, i){
-  const w = W[n - 1], l = w.lessons[i], done = !!state.done[lessonKey(n, i)], nt = nextTarget(n, i);
-  return `<p class="crumb">${badge(l.k)}<span>Woche ${n}, ${KIND[l.k].label}</span></p>
+function viewLesson(c, n, i){
+  const w = c.data.weeks[n - 1], l = w.lessons[i], done = !!state.done[lessonKey(c, n, i)], nt = nextTarget(c, n, i);
+  return `<p class="crumb">${badge(l.k)}<span>${c.short}, Woche ${n}, ${KIND[l.k].label}</span></p>
   <h1>${fmt(l.t, false)}</h1>
   <article class="lesson">${l.b.map(renderBlock).join("")}</article>
   <div class="lesson-end">${done
-    ? `<p class="done-note">${icon("check")}Abgeschlossen</p><div class="btns"><a class="btn" href="${nt.href}">${nt.label}${icon("next")}</a><button type="button" class="btn ghost" data-act="undo" data-n="${n}" data-i="${i}">Als offen markieren</button></div>`
-    : `<button type="button" class="btn wide" data-act="complete" data-n="${n}" data-i="${i}">Abschließen und weiter</button>`}</div>`;
+    ? `<p class="done-note">${icon("check")}Abgeschlossen</p><div class="btns"><a class="btn" href="${nt.href}">${nt.label}${icon("next")}</a><button type="button" class="btn ghost" data-act="undo" data-c="${c.id}" data-n="${n}" data-i="${i}">Als offen markieren</button></div>`
+    : `<button type="button" class="btn wide" data-act="complete" data-c="${c.id}" data-n="${n}" data-i="${i}">Abschließen und weiter</button>`}</div>`;
 }
 
 /* ---- Quiz ---- */
@@ -234,7 +249,7 @@ function prep(q){
   if(words.length > 1){ let tries = 0; do { pool = shuffle(pool); tries++; } while(tries < 10 && isAccepted(words, q[4], pool)); }
   return {type:"ord", q:q[1], words, pool, ex: q[3] || "", alts: q[4] || []};
 }
-function startQuiz(n){ Q = {w:n, i:0, score:0, items: W[n - 1].quiz.map(prep), answered:false, sel:-1, picked:[], ok:false, finished:false}; }
+function startQuiz(c, n){ Q = {c:c.id, w:n, i:0, score:0, items: c.data.weeks[n - 1].quiz.map(prep), answered:false, sel:-1, picked:[], ok:false, finished:false}; }
 function chip(wd, act, k, dis, used){
   return `<button type="button" class="chip${used ? " used" : ""}" data-act="${act}" data-k="${k}"${dis || used ? " disabled" : ""}><span class="th" lang="th">${esc(wd[0])}</span><span class="ro">${esc(wd[1])}</span></button>`;
 }
@@ -249,27 +264,31 @@ function thWords(n){
   if(u === 1 && t > 0) s += "เอ็ด"; else if(u > 0) s += TD[u];
   return s;
 }
-function viewQuiz(n){
-  const total = Q.items.length;
-  const head = `<p class="crumb"><span class="badge" aria-hidden="true">${icon("quiz")}</span><span>Woche ${n}, Wochentest</span></p>`;
+function viewQuiz(c, n){
+  const total = Q.items.length, W = c.data.weeks;
+  const head = `<p class="crumb"><span class="badge" aria-hidden="true">${icon("quiz")}</span><span>${c.short}, Woche ${n}, Wochentest</span></p>`;
   if(Q.finished){
     const pct = Math.round(Q.score / total * 100);
     const words = thWords(pct) + "เปอร์เซ็นต์";
     const msg = pct >= 80 ? "Stark! Du bist bereit für die nächste Woche."
       : pct >= PASS ? "Bestanden. Schau dir die Punkte, bei denen du unsicher warst, noch einmal in den Lektionen an."
       : `Noch nicht bestanden – der Test zählt ab ${PASS} %. Wiederhole die Lektionen und versuch es noch einmal.`;
+    let nextBtn;
+    if(n < W.length) nextBtn = `<a class="btn ghost" href="${weekHref(c, n + 1)}">Weiter zu Woche ${n + 1}</a>`;
+    else if(c.id === "a1") nextBtn = `<a class="btn ghost" href="${COURSES.a2.home}">Weiter zum A2-Kurs</a>`;
+    else nextBtn = `<a class="btn ghost" href="${c.home}">Zur Kursübersicht</a>`;
     return `${head}<h1 class="sr">Ergebnis</h1><p class="bigscore" lang="th" data-say="${esc(words)}">${thDigits(pct)}<span class="pct">%</span></p>
       <p><span class="thi" lang="th">${esc(words)}</span>: ${pct} %, ${Q.score} von ${total} richtig</p>
       <p>${msg}</p>
-      <div class="btns"><button type="button" class="btn" data-act="retry">Test wiederholen</button>${n < W.length ? `<a class="btn ghost" href="#/w/${n + 1}">Weiter zu Woche ${n + 1}</a>` : `<a class="btn ghost" href="#/">Zur Kursübersicht</a>`}</div>`;
+      <div class="btns"><button type="button" class="btn" data-act="retry">Test wiederholen</button>${nextBtn}</div>`;
   }
   const it = Q.items[Q.i];
   let h = `<div class="quiz">${head}<div class="qhead"><span>Frage ${Q.i + 1} von ${total}</span><span>${Q.score} richtig</span></div><div class="pbar"><i style="width:${Math.round(Q.i / total * 100)}%"></i></div>`;
   if(it.type === "mc"){
     h += `<h1 class="q">${fmt(it.q, false)}</h1>` + it.opts.map((o, k) => {
-      let c = "opt";
-      if(Q.answered){ if(k === it.ans) c += " right"; else if(k === Q.sel) c += " wrong"; }
-      return `<button type="button" class="${c}" data-act="opt" data-k="${k}"${Q.answered ? " disabled" : ""}>${fmt(o, false)}</button>`;
+      let cl = "opt";
+      if(Q.answered){ if(k === it.ans) cl += " right"; else if(k === Q.sel) cl += " wrong"; }
+      return `<button type="button" class="${cl}" data-act="opt" data-k="${k}"${Q.answered ? " disabled" : ""}>${fmt(o, false)}</button>`;
     }).join("");
   } else {
     h += `<h1 class="q">Bilde den Satz: ${fmt(it.q, false)}</h1>`;
@@ -289,10 +308,10 @@ let VOCAB = null, VQ = "";
 function vocabList(){
   if(VOCAB) return VOCAB;
   const out = [], seen = new Set();
-  W.forEach((w) => w.lessons.forEach((l) => l.b.forEach((b) => {
+  COURSE_LIST.forEach((c) => c.data.weeks.forEach((w) => w.lessons.forEach((l) => l.b.forEach((b) => {
     if(b[0] !== "voc") return;
-    b[1].forEach((v) => { const k = w.n + "|" + v[0] + "|" + v[2]; if(!seen.has(k)){ seen.add(k); out.push({n:w.n, th:v[0], ro:v[1], de:v[2]}); } });
-  })));
+    b[1].forEach((v) => { const k = c.id + "|" + w.n + "|" + v[0] + "|" + v[2]; if(!seen.has(k)){ seen.add(k); out.push({c, n:w.n, th:v[0], ro:v[1], de:v[2]}); } });
+  }))));
   VOCAB = out;
   return out;
 }
@@ -301,15 +320,16 @@ function vocabResults(){
   const all = vocabList(), q = VQ.trim(), nq = norm(q);
   const items = q ? all.filter((v) => v.th.includes(q) || norm(v.ro).includes(nq) || norm(v.de).includes(nq)) : all;
   if(!items.length) return `<p class="empty">Kein Treffer für „${esc(q)}“. Versuch es mit einem kürzeren Suchbegriff oder ohne Tonzeichen.</p>`;
-  let h = "", cur = 0;
+  let h = "", cur = "";
   items.forEach((v) => {
-    if(v.n !== cur){ if(cur) h += `</ul>`; cur = v.n; h += `<h2 class="vh">Woche ${v.n}: ${esc(W[v.n - 1].title)}</h2><ul class="voc">`; }
+    const g = v.c.id + v.n;
+    if(g !== cur){ if(cur) h += `</ul>`; cur = g; h += `<h2 class="vh">${v.c.short}, Woche ${v.n}: ${esc(v.c.data.weeks[v.n - 1].title)}</h2><ul class="voc">`; }
     h += `<li data-say="${esc(v.th)}"><span class="th" lang="th">${esc(v.th)}${sayIc()}</span>${roLine(v.ro)}<span class="de">${fmt(v.de, false)}</span></li>`;
   });
   return h + `</ul>`;
 }
 function viewVocab(){
-  return `<h1>Vokabeln</h1><p class="lead">${vocabList().length} Wörter und Wendungen aus allen Wochen.<span class="tts-inline"> Tippe auf einen Eintrag, um ihn zu hören.</span></p>
+  return `<h1>Vokabeln</h1><p class="lead">${vocabList().length} Wörter und Wendungen aus beiden Kursen.<span class="tts-inline"> Tippe auf einen Eintrag, um ihn zu hören.</span></p>
   <div class="search"><label for="vq" class="sr">Vokabeln durchsuchen</label><input id="vq" type="search" autocomplete="off" placeholder="Thai, Umschrift oder Deutsch" value="${esc(VQ)}"></div>
   <div id="vres">${vocabResults()}</div>`;
 }
@@ -334,6 +354,45 @@ function installInfo(){
   if(I.ios) return `<h2 class="h-sm">Als App installieren</h2><p>Tippe in Safari auf <b>Teilen</b> und dann auf <b>Zum Home-Bildschirm</b>. Der Kurs startet dann wie eine App und funktioniert auch offline.</p>`;
   return `<h2 class="h-sm">Als App installieren</h2><p>Öffne das Browser-Menü und wähle <b>App installieren</b> oder <b>Zum Startbildschirm hinzufügen</b>. Der Kurs funktioniert danach auch offline.</p>`;
 }
+
+/* ---- Updates ---- */
+const U = P.updates;
+const fp = (h) => (h ? `<span class="fp">${esc(String(h).slice(0, 8))}</span>` : "–");
+const applyLabel = () => (P.native ? "Jetzt aktualisieren" : "Neu laden");
+function apkButton(cls){ const m = U.latest; return m && m.apk && P.os === "android" ? `<a class="btn${cls ? " " + cls : ""}" href="${esc(m.apk)}">${icon("next")}Neue App laden</a>` : ""; }
+// Hinweis oben auf der Kursseite, sobald ein Update bereitliegt.
+function updateBanner(){
+  if(U.status === "ready") return `<div class="notice" role="status"><span><b>${P.native ? "Neue Inhalte sind geladen." : "Eine neue Fassung ist geladen."}</b> ${P.native ? "Sie werden beim nächsten Start aktiv." : "Sie ist nach dem Neuladen aktiv."}</span><button type="button" class="btn" data-act="update-apply">${applyLabel()}</button></div>`;
+  if(U.status === "native") return `<div class="notice" role="status"><span><b>Neue App-Version verfügbar.</b> ${P.os === "android" ? "Einfach über die alte installieren – dein Fortschritt bleibt erhalten." : "Installiere sie neu, um die neuesten Inhalte zu bekommen."}</span>${apkButton()}</div>`;
+  return "";
+}
+function updateInfo(){
+  const i = U.info, m = U.latest;
+  let h = `<h2 class="h-sm">Version und Updates</h2>`;
+  if(i) h += `<p>Version ${esc(i.version)}${i.build ? ` (Build ${esc(i.build)})` : ""}${i.built ? `, erstellt am ${esc(new Date(i.built).toLocaleDateString("de-DE"))}` : ""}.<br><span class="note">Fingerprint: Inhalte ${fp(i.web)}, App ${fp(i.native)}</span></p>`;
+  if(!P.native){
+    h += `<p>Die Web-App lädt neue Inhalte von selbst, sobald du sie online öffnest.</p>`;
+    if(U.status === "ready") h += `<div class="btns"><button type="button" class="btn" data-act="update-apply">${applyLabel()}</button></div>`;
+    return h;
+  }
+  if(U.status === "unsupported") return h;
+  h += `<p>Neue Inhalte kommen automatisch: Die App lädt sie im Hintergrund und nutzt sie ab dem nächsten Start. Nur wenn sich der native Teil der App ändert (anderer App-Fingerprint), braucht es eine neue APK – die lässt sich über die alte installieren, der Fortschritt bleibt erhalten.</p>`;
+  const msg = {
+    checking: "Suche nach Updates …",
+    downloading: "Neue Inhalte werden geladen …",
+    ready: "Neue Inhalte sind geladen.",
+    current: "Die App ist auf dem neuesten Stand.",
+    native: `Für die neuesten Inhalte braucht es einmal eine neue App-Version${m && m.build ? ` (Build ${esc(m.build)})` : ""}.`,
+    offline: "Der Update-Server ist gerade nicht erreichbar.",
+    error: `Das Update konnte nicht geladen werden${U.error ? `: ${esc(U.error)}` : "."}`
+  }[U.status];
+  if(msg) h += `<p role="status"><b>${msg}</b></p>`;
+  const btns = [];
+  if(U.status === "ready") btns.push(`<button type="button" class="btn" data-act="update-apply">${applyLabel()}</button>`);
+  if(U.status === "native") btns.push(apkButton());
+  if(!["checking","downloading"].includes(U.status)) btns.push(`<button type="button" class="btn ghost" data-act="update-check">Nach Updates suchen</button>`);
+  return h + `<div class="btns">${btns.join("")}</div>`;
+}
 function viewInfo(){
   const s = state.settings;
   const seg = (v, label) => `<button type="button" data-act="theme" data-v="${v}" aria-pressed="${s.theme === v}">${label}</button>`;
@@ -347,42 +406,48 @@ function viewInfo(){
   <ul class="legend">${legend.map((l) => `<li><span>${melody(l[2], {scale:2})}</span><span><b>${l[0]}</b> = ${l[1]}, z. B. ${l[2]}</span></li>`).join("")}</ul>
   <p>Doppelte Vokale sind lang: <b>aa</b>, <b>ii</b>, <b>uu</b>. <b>ɛ</b> klingt wie ä, <b>ɔ</b> wie das o in „Sonne“, <b>ə</b> wie ein ö mit ungerundeten Lippen, <b>ʉ</b> wie ein u mit breit gezogenen Lippen.</p>
   <p><b>bp</b>, <b>dt</b> und <b>g</b> sind unbehauchte p-, t- und k-Laute. <b>ph</b>, <b>th</b> und <b>kh</b> sind behaucht – nie wie f oder englisches th. <b>ng</b> klingt wie in „singen“, auch am Wortanfang.</p>
-  <h2 class="h-sm">So ist der Kurs aufgebaut</h2>
-  <p>16 Wochen mit je vier Lektionen und einem Wochentest. In den Wochen 1–8 lernst du parallel die Schrift, ab Woche 9 übst du in der Lese-Ecke. Plane etwa drei bis fünf Stunden pro Woche ein – am besten täglich eine kurze Einheit.</p>
+  <h2 class="h-sm">So sind die Kurse aufgebaut</h2>
+  <p>Der Kurs A0–A1 hat 16 Wochen, der Kurs A2 zwölf – jeweils mit vier Lektionen und einem Wochentest pro Woche. In A0–A1 lernst du in den Wochen 1–8 parallel die Schrift. A2 baut darauf auf und ergänzt, was in A0–A1 noch fehlt: neue Satzbausteine, Alltagsthemen und viel Lesepraxis. Plane etwa drei bis fünf Stunden pro Woche ein – am besten täglich eine kurze Einheit.</p>
   <h2 class="h-sm">Vorlesen</h2>
   ${voiceInfo()}
   ${installInfo()}
+  ${updateInfo()}
   <h2 class="h-sm">Fortschritt</h2>
-  <p>${P.native ? "Dein Fortschritt wird auf diesem Gerät gespeichert." : "Dein Fortschritt wird in diesem Browser gespeichert."}</p>
+  <p>${P.native ? "Dein Fortschritt wird auf diesem Gerät gespeichert und bleibt bei Updates erhalten." : "Dein Fortschritt wird in diesem Browser gespeichert."}</p>
   ${confirmReset
-    ? `<p>Alle erledigten Lektionen und Testergebnisse werden gelöscht.</p><div class="btns"><button type="button" class="btn danger" data-act="reset-yes">Ja, alles zurücksetzen</button><button type="button" class="btn ghost" data-act="reset-no">Abbrechen</button></div>`
+    ? `<p>Alle erledigten Lektionen und Testergebnisse beider Kurse werden gelöscht.</p><div class="btns"><button type="button" class="btn danger" data-act="reset-yes">Ja, alles zurücksetzen</button><button type="button" class="btn ghost" data-act="reset-no">Abbrechen</button></div>`
     : `<button type="button" class="btn ghost" data-act="reset">Fortschritt zurücksetzen</button>`}`;
 }
 
 /* ---- Routing ---- */
 function parse(){
-  const p = location.hash.replace(/^#\/?/, "").split("/").filter(Boolean);
+  const raw = location.hash;
+  let p = raw.replace(/^#\/?/, "").split("/").filter(Boolean);
+  if(p[0] === "vokabeln") return {name:"vocab"};
+  if(p[0] === "info") return {name:"info"};
+  let c = COURSES.a1;
+  if(p[0] === "a2"){ c = COURSES.a2; p = p.slice(1); }
+  else if(!raw || raw === "#") c = curCourse();
+  const W = c.data.weeks;
   if(p[0] === "w"){
     const n = parseInt(p[1], 10);
     if(n >= 1 && n <= W.length){
-      if(p[2] === "l"){ const i = parseInt(p[3], 10); if(i >= 0 && i < W[n - 1].lessons.length) return {name:"lesson", n, i}; }
-      if(p[2] === "q") return {name:"quiz", n};
-      return {name:"week", n};
+      if(p[2] === "l"){ const i = parseInt(p[3], 10); if(i >= 0 && i < W[n - 1].lessons.length) return {name:"lesson", c, n, i}; }
+      if(p[2] === "q") return {name:"quiz", c, n};
+      return {name:"week", c, n};
     }
   }
-  if(p[0] === "vokabeln") return {name:"vocab"};
-  if(p[0] === "info") return {name:"info"};
-  return {name:"home"};
+  return {name:"home", c};
 }
 function render(){
   const r = current;
   let html;
-  if(r.name === "week") html = viewWeek(r.n);
-  else if(r.name === "lesson") html = viewLesson(r.n, r.i);
-  else if(r.name === "quiz") html = viewQuiz(r.n);
+  if(r.name === "week") html = viewWeek(r.c, r.n);
+  else if(r.name === "lesson") html = viewLesson(r.c, r.n, r.i);
+  else if(r.name === "quiz") html = viewQuiz(r.c, r.n);
   else if(r.name === "vocab") html = viewVocab();
   else if(r.name === "info") html = viewInfo();
-  else html = viewHome();
+  else html = viewHome(r.c);
   app.innerHTML = html;
   topbar.innerHTML = viewTop(r);
   tabbar.innerHTML = viewTabs(r);
@@ -391,7 +456,8 @@ function render(){
 function onRoute(){
   const prev = current;
   current = parse();
-  if(current.name === "quiz" && (!Q || Q.w !== current.n || (Q.finished && prev.name !== "quiz"))) startQuiz(current.n);
+  if(current.c && state.settings.course !== current.c.id){ state.settings.course = current.c.id; save(); }
+  if(current.name === "quiz" && (!Q || Q.c !== current.c.id || Q.w !== current.n || (Q.finished && prev.name !== "quiz"))) startQuiz(current.c, current.n);
   if(current.name !== "info") confirmReset = false;
   render();
   window.scrollTo(0, 0);
@@ -415,11 +481,12 @@ function focusSel(sel){ const el = app.querySelector(sel); if(el) try{ el.focus(
 /* ---- Aktionen ---- */
 function handle(a){
   const act = a.getAttribute("data-act");
+  const c = COURSES[a.getAttribute("data-c")] || current.c || curCourse();
   const n = +a.getAttribute("data-n"), i = +a.getAttribute("data-i"), k = +a.getAttribute("data-k");
   switch(act){
     case "reveal": { const li = a.closest("li"); if(li) li.classList.add("open"); break; }
-    case "complete": { state.done[lessonKey(n, i)] = true; save(); location.hash = nextTarget(n, i).href; break; }
-    case "undo": { delete state.done[lessonKey(n, i)]; save(); render(); break; }
+    case "complete": { state.done[lessonKey(c, n, i)] = true; save(); location.hash = nextTarget(c, n, i).href; break; }
+    case "undo": { delete state.done[lessonKey(c, n, i)]; save(); render(); break; }
     case "opt": {
       if(!Q || Q.answered) return;
       const it = Q.items[Q.i];
@@ -440,12 +507,12 @@ function handle(a){
       Q.i++; Q.answered = false; Q.sel = -1; Q.picked = []; Q.ok = false;
       if(Q.i >= Q.items.length){
         Q.finished = true;
-        const pct = Math.round(Q.score / Q.items.length * 100);
-        if(pct > (+state.quiz[Q.w] || 0)){ state.quiz[Q.w] = pct; save(); }
+        const qc = COURSES[Q.c], pct = Math.round(Q.score / Q.items.length * 100), key = quizKey(qc, Q.w);
+        if(pct > (+state.quiz[key] || 0)){ state.quiz[key] = pct; save(); }
       }
       render(); window.scrollTo(0, 0); break;
     }
-    case "retry": { startQuiz(Q ? Q.w : current.n); render(); window.scrollTo(0, 0); break; }
+    case "retry": { startQuiz(Q ? COURSES[Q.c] : c, Q ? Q.w : current.n); render(); window.scrollTo(0, 0); break; }
     case "set-ro": { state.settings.ro = a.checked; save(); applySettings(); break; }
     case "set-slow": { state.settings.slow = a.checked; save(); break; }
     case "theme": { state.settings.theme = a.getAttribute("data-v"); save(); applySettings(); render(); break; }
@@ -453,6 +520,8 @@ function handle(a){
     case "reset-no": { confirmReset = false; render(); break; }
     case "tts-install": { TTS.install(); break; }
     case "install": { P.install.run(); break; }
+    case "update-check": { U.check(true); break; }
+    case "update-apply": { U.apply(); break; }
     case "reset-yes": { const st = state.settings; state = blank(); state.settings = st; confirmReset = false; Q = null; save(); render(); break; }
   }
 }
@@ -465,8 +534,9 @@ document.addEventListener("click", (e) => {
 
 /* ---- Zurück-Taste (Android) ---- */
 function parentHref(r){
-  if(r.name === "lesson" || r.name === "quiz") return `#/w/${r.n}`;
-  return "#/";
+  const c = r.c || curCourse();
+  if(r.name === "lesson" || r.name === "quiz") return weekHref(c, r.n);
+  return c.home;
 }
 P.system.onBack(({canGoBack}) => {
   if(current.name === "home"){ P.system.exit(); return; }
@@ -477,13 +547,17 @@ P.system.onBack(({canGoBack}) => {
 applySettings();
 TTS.init(onVoice);
 P.install.onChange = () => { if(current.name === "info") render(); };
+// Update-Hinweise nur auf der Kursübersicht und unter Info neu zeichnen, nie mitten in Lektion oder Test.
+U.onChange = () => { if(current.name === "home" || current.name === "info") render(); };
 window.addEventListener("hashchange", onRoute);
 onRoute();
+U.ready();
 // In der App: Fortschritt aus der Sicherung holen, falls der WebView-Speicher geleert wurde.
 P.storage.restore(KEY).then((raw) => {
   if(!raw) return;
   state = loadState(raw);
   applySettings();
+  current = parse();
   render();
 });
 })();

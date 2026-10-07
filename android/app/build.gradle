@@ -1,5 +1,8 @@
 apply plugin: 'com.android.application'
 
+// Versionsname kommt aus package.json, damit App, Web-App und Live-Updates dieselbe Version zeigen.
+def appVersion = new groovy.json.JsonSlurper().parse(file('../../package.json')).version
+
 android {
     namespace = "io.github.emilybutterfly.thaiapp"
     compileSdk = rootProject.ext.compileSdkVersion
@@ -9,7 +12,7 @@ android {
         targetSdkVersion rootProject.ext.targetSdkVersion
         // In GitHub Actions zählt jede Build-Nummer hoch, damit sich neue APKs über alte installieren lassen.
         versionCode((System.getenv("GITHUB_RUN_NUMBER") ?: "1") as Integer)
-        versionName "1.0"
+        versionName appVersion
         testInstrumentationRunner "androidx.test.runner.AndroidJUnitRunner"
         aaptOptions {
              // Files and dirs to omit from the packaged assets dir, modified to accommodate modern web apps.
@@ -20,6 +23,8 @@ android {
     signingConfigs {
         // Fester Debug-Schlüssel (kein Geheimnis, Standardpasswort "android"):
         // Alle Debug-APKs haben dieselbe Signatur, Updates behalten also den Lernfortschritt.
+        // Signatur-Fingerprint (SHA-256), den der Build in .github/workflows/android.yml prüft:
+        // 1A:4A:FA:9C:44:82:A8:38:F0:67:99:E9:3A:70:D4:EC:AC:7E:AD:87:43:B7:C2:76:E1:0C:8E:62:4B:2C:CD:43
         debug {
             storeFile file('debug.keystore')
             storePassword 'android'

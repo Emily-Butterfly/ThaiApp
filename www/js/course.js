@@ -21,6 +21,7 @@ weeks: [
      ["hoher Ton","á","hoch und leicht ansteigend, etwas angespannt","ค้า","kháa","Handel treiben"],
      ["steigender Ton","ǎ","tief beginnen und hochziehen – wie ein ungläubiges „Ja?“","ขา","khǎa","Bein"]
    ]],
+   ["tip","Warum ist ข่า (khàa) tief und nicht mittel? Der Ton hängt von der Konsonantenklasse ab: ข gehört zur Hochklasse, und das Tonzeichen ไม้เอก (อ่) macht daraus einen Tiefton. Der Mittelton-Partner der Reihe ist คา (khaa) – Tiefklasse ohne Zeichen. Genauso ist ข่าว (khàao, „Nachricht“) tief. Die Klassen lernst du ab Woche 2, alle Tonzeichen-Regeln in Woche 6.","Tonregel"],
    ["p","Die goldene Linie neben jeder Umschrift zeigt den Tonverlauf jeder Silbe: oben hoch, unten tief."],
    ["tip","ม้ามาหาหมา (máa maa hǎa mǎa) – „Das Pferd kommt den Hund besuchen.“ Fast viermal dieselbe Silbe, aber drei verschiedene Töne. Sprich den Satz langsam, Silbe für Silbe.","Übungssatz"],
    ["h","Kurz oder lang?"],

@@ -1,11 +1,15 @@
 {
   "name": "thai-app",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "private": true,
-  "description": "Thai in 16 Wochen (A0–A1) – Lern-App für Android, iOS und als installierbare Web-App",
+  "description": "Thai lernen von A0 bis A2 (Kurs A0–A1 in 16 Wochen, Kurs A2 in 12 Wochen) – Lern-App für Android, iOS und als installierbare Web-App",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/Emily-Butterfly/ThaiApp.git"
+  },
   "license": "UNLICENSED",
   "scripts": {
-    "assets": "node scripts/assets.mjs",
+    "assets": "node scripts/assets.mjs && node scripts/version.mjs",
     "serve": "npm run assets && npx --yes http-server www -p 8080 -c-1",
     "sync": "npm run assets && cap sync",
     "android": "npm run sync && cap open android",
@@ -18,7 +22,8 @@
     "@capacitor/app": "8.1.2",
     "@capacitor/core": "8.5.2",
     "@capacitor/ios": "8.5.2",
-    "@capacitor/preferences": "8.0.1"
+    "@capacitor/preferences": "8.0.1",
+    "@capgo/capacitor-updater": "8.52.1"
   },
   "devDependencies": {
     "@capacitor/cli": "8.5.2",

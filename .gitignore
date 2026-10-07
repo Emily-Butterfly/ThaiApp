@@ -16,5 +16,9 @@ android/app/src/main/res/drawable-nodpi/
 ios/App/App/Assets.xcassets/AppIcon.appiconset/*.png
 ios/App/App/Assets.xcassets/Splash.imageset/*.png
 
+# Von scripts/version.mjs erzeugt (Fingerprints für Updates)
+www/version.json
+www/sw-version.js
+
 # Versionen sind in package.json exakt festgelegt
 package-lock.json

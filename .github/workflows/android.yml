@@ -6,6 +6,11 @@ on:
       - "**.md"
   workflow_dispatch:
 
+# Neuere Pushes ersetzen einen laufenden Build, damit immer die neueste Fassung veröffentlicht wird.
+concurrency:
+  group: android-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
   apk:
     runs-on: ubuntu-latest
@@ -30,7 +35,12 @@ jobs:
       - name: Abhängigkeiten installieren
         run: npm install --no-audit --no-fund
 
-      - name: Icons, Schriften und Laufzeit erzeugen
+      # Erzeugt auch www/version.json mit den Fingerprints (scripts/version.mjs).
+      - name: Icons, Schriften, Laufzeit und Fingerprints erzeugen
+        env:
+          APP_BUILD: ${{ github.run_number }}
+          # Nur Builds des Hauptbranchs holen Live-Updates (siehe scripts/version.mjs).
+          UPDATE_CHANNEL: ${{ github.ref_name == github.event.repository.default_branch && 'release' || '' }}
         run: npm run assets
 
       - name: Web-App ins Android-Projekt kopieren
@@ -43,6 +53,29 @@ jobs:
       - name: APK benennen
         run: cp android/app/build/outputs/apk/debug/app-debug.apk Thai-lernen.apk
 
+      # Android installiert eine neue APK nur dann über die alte, wenn beide mit demselben Schlüssel
+      # signiert sind. Ändert sich der Signatur-Fingerprint, bricht der Build ab.
+      - name: Signatur-Fingerprint prüfen
+        env:
+          EXPECTED: 1a4afa9c4482a838f06799e93a70d4ecac7ead8743b7c276e10c8e624b2ccd43
+        run: |
+          APKSIGNER="$(ls -d "$ANDROID_HOME"/build-tools/*/ | sort -V | tail -n 1)apksigner"
+          ACTUAL="$("$APKSIGNER" verify --print-certs Thai-lernen.apk | sed -n 's/^Signer #1 certificate SHA-256 digest: //p')"
+          echo "Signatur-Fingerprint (SHA-256): $ACTUAL"
+          if [ "$ACTUAL" != "$EXPECTED" ]; then
+            echo "::error::Die APK ist mit einem anderen Schlüssel signiert ($ACTUAL statt $EXPECTED) und ließe sich nicht über die installierte App installieren."
+            exit 1
+          fi
+
+      # Live-Update: dasselbe www/ wie in der APK als Paket. Installierte Apps mit gleichem
+      # native-Fingerprint laden es und brauchen keine neue APK.
+      - name: Live-Update-Paket bauen
+        run: |
+          WEB_ZIP="web-$(node -p 'require("./www/version.json").web.slice(0, 12)').zip"
+          (cd www && zip -qr -X "../$WEB_ZIP" .)
+          node scripts/version.mjs manifest "$WEB_ZIP" update.json
+          echo "WEB_ZIP=$WEB_ZIP" >> "$GITHUB_ENV"
+
       - name: APK als Build-Artefakt hochladen
         uses: actions/upload-artifact@v4
         with:
@@ -50,14 +83,39 @@ jobs:
           path: Thai-lernen.apk
           if-no-files-found: error
 
-      # Auf dem Hauptbranch: APK unter "Releases" veröffentlichen, damit sie sich direkt am Handy laden lässt.
+      # Auf dem Hauptbranch: APK und Live-Update unter "Releases" veröffentlichen.
+      # Erst als Entwurf mit allen Dateien anlegen, dann veröffentlichen – so sieht keine App
+      # eine update.json, deren Paket noch fehlt.
       - name: Release aktualisieren
         if: github.ref_name == github.event.repository.default_branch
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
+          WEB=$(node -p 'require("./www/version.json").web')
+          NATIVE=$(node -p 'require("./www/version.json").native')
+          VERSION=$(node -p 'require("./www/version.json").version')
+          cat > notes.md <<EOF
+          **Version $VERSION, Build ${{ github.run_number }}**
+
+          Auf dem Android-Handy \`Thai-lernen.apk\` herunterladen und öffnen. Beim ersten Mal fragt Android, ob der Browser Apps installieren darf – das einmal erlauben.
+
+          **Updates:** Die installierte App holt neue Inhalte selbst (Live-Update), solange der App-Fingerprint gleich bleibt. Ändert er sich, die neue APK einfach über die alte installieren – der Lernfortschritt bleibt erhalten.
+
+          | | Fingerprint |
+          | --- | --- |
+          | Inhalte (web) | \`$WEB\` |
+          | App (native) | \`$NATIVE\` |
+          | Signatur (SHA-256) | \`1a4afa9c4482a838f06799e93a70d4ecac7ead8743b7c276e10c8e624b2ccd43\` |
+          EOF
+          drafts() { gh api "repos/$GITHUB_REPOSITORY/releases" --jq '.[] | select(.draft and .tag_name == "android-latest") | .id'; }
+          # Reste abgebrochener Läufe und das bisherige Release entfernen …
+          for id in $(drafts); do gh api -X DELETE "repos/$GITHUB_REPOSITORY/releases/$id"; done
           gh release delete android-latest --yes --cleanup-tag || true
-          gh release create android-latest Thai-lernen.apk \
+          # … dann das neue Release als Entwurf mit allen Dateien anlegen und erst danach veröffentlichen.
+          gh release create android-latest Thai-lernen.apk "$WEB_ZIP" update.json \
+            --draft \
             --target "$GITHUB_SHA" \
             --title "Thai lernen – Android-App (Build ${{ github.run_number }})" \
-            --notes "Auf dem Android-Handy herunterladen und öffnen. Beim ersten Mal fragt Android, ob der Browser Apps installieren darf – das einmal erlauben. Neue Builds lassen sich einfach drüber installieren, der Lernfortschritt bleibt erhalten."
+            --notes-file notes.md
+          ID=$(drafts | head -n 1)
+          gh api -X PATCH "repos/$GITHUB_REPOSITORY/releases/$ID" -F draft=false > /dev/null

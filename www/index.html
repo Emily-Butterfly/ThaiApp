@@ -3,8 +3,8 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-<title>Thai in 16 Wochen</title>
-<meta name="description" content="Thai lernen von A0 bis A1: Töne, Schrift, Grammatik und Sprachgefühl in 16 Wochen.">
+<title>Thai lernen</title>
+<meta name="description" content="Thai lernen von A0 bis A2: Töne, Schrift, Grammatik und Sprachgefühl – Kurs A0–A1 in 16 Wochen, Kurs A2 in 12 Wochen.">
 <meta name="theme-color" content="#E6EDE5" media="(prefers-color-scheme: light)">
 <meta name="theme-color" content="#111B1A" media="(prefers-color-scheme: dark)">
 <meta name="color-scheme" content="light dark">
@@ -25,12 +25,13 @@
 <main id="app" class="wrap" tabindex="-1"></main>
 <nav class="tabbar" aria-label="Hauptnavigation"><div class="tabin" id="tabbar"></div></nav>
 <script src="vendor/capacitor.js"></script>
-<script src="js/course.js"></script>
 <script src="js/platform.js"></script>
+<script src="js/course.js"></script>
+<script src="js/course-a2.js"></script>
 <script src="js/app.js"></script>
 <script>
 if("serviceWorker" in navigator && !window.Platform.native && (location.protocol === "https:" || location.hostname === "localhost")){
-  window.addEventListener("load", () => { navigator.serviceWorker.register("sw.js").catch(() => {}); });
+  window.addEventListener("load", () => { navigator.serviceWorker.register("sw.js", {updateViaCache: "none"}).catch(() => {}); });
 }
 </script>
 </body>
