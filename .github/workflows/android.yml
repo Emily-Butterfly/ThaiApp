@@ -60,7 +60,11 @@ jobs:
           EXPECTED: 1a4afa9c4482a838f06799e93a70d4ecac7ead8743b7c276e10c8e624b2ccd43
         run: |
           APKSIGNER="$(ls -d "$ANDROID_HOME"/build-tools/*/ | sort -V | tail -n 1)apksigner"
-          ACTUAL="$("$APKSIGNER" verify --print-certs Thai-lernen.apk | sed -n 's/^Signer #1 certificate SHA-256 digest: //p')"
+          # verify bricht bei ungültiger Signatur ab. Je nach build-tools heißen die Zeilen
+          # "Signer #1 certificate …" oder "Signer (minSdkVersion=…) certificate …".
+          OUT="$("$APKSIGNER" verify --verbose --print-certs Thai-lernen.apk)"
+          echo "$OUT" | grep -i -E 'verified|signer|digest' || true
+          ACTUAL="$(printf '%s\n' "$OUT" | tr -d '\r' | sed -n 's/.*certificate sha-256 digest: *//Ip' | tr 'A-F' 'a-f' | sort -u | paste -sd ' ' -)"
           echo "Signatur-Fingerprint (SHA-256): $ACTUAL"
           if [ "$ACTUAL" != "$EXPECTED" ]; then
             echo "::error::Die APK ist mit einem anderen Schlüssel signiert ($ACTUAL statt $EXPECTED) und ließe sich nicht über die installierte App installieren."
